@@ -1,0 +1,8 @@
+<launch>
+  <include file="$(find openni_launch)/launch/openni.launch">
+    <param name="depth_registration" value="true"></param>
+  </include>
+  <node name="openni_tracker" pkg="openni_tracker" type="openni_tracker">
+    <param name="camera_frame_id" value="camera_depth_frame"></param>
+  </node>
+</launch>
