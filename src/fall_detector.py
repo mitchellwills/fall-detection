@@ -9,22 +9,22 @@ import collections
 
 Tv = 0.8
 TvH = 0.03
-TvWD = 0.13
-TvXYZ = 1.0
+TvWD = 0.11
+TvZ = 0.65
 TiH = 0.45
 counter_a = counter_b = 0
 activity_detection = 0
 
-counter_falling = 0.13
+counter_falling = 0.12
 counter_inactivity = 0.5
 counter_activity_detection = 2.0
 
 vH_buf = collections.deque(maxlen=9)
 vWD_buf = collections.deque(maxlen=9)
-vXYZ_buf = collections.deque(maxlen=9)
+vZ_buf = collections.deque(maxlen=9)
 vH = 0
 vWD = 0
-vXYZ = 0
+vZ = 0
 
 last_state = None
 
@@ -123,21 +123,21 @@ plt.plot([0, 2], [Tv, Tv], color='b')
 plt.plot([0, 2], [-Tv, -Tv], color='b')
 plt.plot([0, 1], [-TvH, -TvH], color='r')
 plt.plot([1, 2], [TvWD, TvWD], color='r')
-plt.plot([2, 3], [TvXYZ, TvXYZ], color='r')
+plt.plot([2, 3], [-TvZ, -TvZ], color='r')
 plt.plot([0, 1], [TiH, TiH], color='y')
 data_ax.set_ylim([-1.5, 1.5])
 data_ax.set_xticks((0.5, 1.5))
-data_ax.set_xticklabels(('H', 'WD', 'XYZ'))
+data_ax.set_xticklabels(('vH', 'vWD', 'vZ'))
 
 def state_callback(state):
-    global TvH, TvWD, TvXYZ, TiH
+    global TvH, TvWD, TvZ, TiH
     global counter_a, counter_b
     global counter_falling, counter_inactivity
     global activity_detection
 
-    global vH, vWD, vXYZ
-    global vH_pub, vWD_pub, vXYZ_pub
-    global vH_buf, vWD_buf, vXYZ_buf
+    global vH, vWD, vZ
+    global vH_pub, vWD_pub, vZ_pub
+    global vH_buf, vWD_buf, vZ_buf
 
     global last_state
     if last_state is not None:
@@ -146,15 +146,15 @@ def state_callback(state):
             return
         vH_raw = (state.height - last_state.height) / dt
         vWD_raw = (dist(state.width, state.depth)
-               - dist(last_state.width, last_state.depth)) / dt
-        vXYZ_raw = dist(state.x-last_state.x, state.y-last_state.y, state.z-last_state.z) / dt
+                   - dist(last_state.width, last_state.depth)) / dt
+        vZ_raw = (state.z - last_state.z) / dt
         if abs(vH_raw) > Tv or abs(vWD_raw) > Tv:
             return
 
 
         vH_buf.append(vH_raw)
         vWD_buf.append(vWD_raw)
-        vXYZ_buf.append(vXYZ_raw)
+        vZ_buf.append(vZ_raw)
 
         if len(vH_buf) < 9:
             return
@@ -162,20 +162,20 @@ def state_callback(state):
         import numpy as np
         vH = savitzky_golay(np.array(vH_buf), 9, 2)[len(vH_buf)-1]
         vWD = savitzky_golay(np.array(vWD_buf), 9, 2)[len(vWD_buf)-1]
-        vXYZ = savitzky_golay(np.array(vXYZ_buf), 9, 2)[len(vXYZ_buf)-1]
+        vZ = savitzky_golay(np.array(vZ_buf), 9, 2)[len(vZ_buf)-1]
 
         vH_pub.publish(vH)
         vWD_pub.publish(vWD)
-        vXYZ_pub.publish(vXYZ)
+        vZ_pub.publish(vZ)
 
 
-        if (vH < -TvH) and (vWD > TvWD) and (abs(vXYZ) > TvXYZ):
+        if (vH < -TvH) and (vWD > TvWD) and (vZ < -TvZ):
+            counter_a = counter_a + dt
             if counter_a >= counter_falling:
                 rospy.loginfo("Falling Detected")
                 activity_detection = counter_activity_detection
-            counter_a = counter_a + dt
         elif counter_a > 0:
-            counter_a = counter_a - dt
+            counter_a = counter_a - dt * 0.5
 
         if activity_detection > 0:
             if vH < TiH:
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     rospy.Subscriber("human/state", human_fall_detector.msg.PersonState, state_callback)
     vH_pub = rospy.Publisher('human/vH', std_msgs.msg.Float64, queue_size=1)
     vWD_pub = rospy.Publisher('human/vWD', std_msgs.msg.Float64, queue_size=1)
-    vXYZ_pub = rospy.Publisher('human/vXYZ', std_msgs.msg.Float64, queue_size=1)
+    vZ_pub = rospy.Publisher('human/vZ', std_msgs.msg.Float64, queue_size=1)
     #rospy.spin()
     while not rospy.is_shutdown():
         state_bars[0].set_height(counter_a)
@@ -208,6 +208,6 @@ if __name__ == '__main__':
 
         data_bars[0].set_height(vH)
         data_bars[1].set_height(vWD)
-        data_bars[2].set_height(vXYZ)
+        data_bars[2].set_height(vZ)
         plt.draw()
         plt.pause(0.05)
